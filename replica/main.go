@@ -18,7 +18,7 @@ func main() {
 	// Argument parsing
 	var r *rand.Rand
 	var seed int64
-	var peers arrayPeers
+	var leaders arrayPeers
 	var clientPort int
 	var paxosPort int
 	flag.Int64Var(&seed, "seed", -1,
@@ -27,7 +27,7 @@ func main() {
 		"Port on which server should listen to client requests")
 	flag.IntVar(&paxosPort, "paxos", 3001,
 		"Port on which server should listen to Paxos requests")
-	flag.Var(&peers, "peer", "A peer for this process")
+	flag.Var(&leaders, "leader", "A leader for this process")
 	flag.Parse()
 
 	// Initialize the random number generator
@@ -45,7 +45,7 @@ func main() {
 	}
 
 	id := fmt.Sprintf("%s:%d", name, paxosPort)
-	log.Printf("Starting peer with ID %s", id)
+	log.Printf("Starting replica with ID %s", id)
 
 	// Convert port to a string form
 	portString := fmt.Sprintf(":%d", clientPort)
@@ -60,7 +60,7 @@ func main() {
 
 	// Initialize KVStore
 	store := KVStore{C: make(chan InputChannelType), store: make(map[string]string)}
-	go serve(&store, r, &peers, id, paxosPort)
+	go serve(&store, r, &leaders, id, paxosPort)
 
 	// Tell GRPC that s will be serving requests for the KvStore service and should use store (defined on line 23)
 	// as the struct whose methods should be called in response.

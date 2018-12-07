@@ -85,13 +85,17 @@ message Proposal {
     Command command = 2;
 }
 
-// Leader service
+// Leader Service
 service LeaderService {
     rpc propose(Proposal) returns(Empty) {}
     // add synod protocol
 }
 
-// ReplicaService
+// Replica Service
 service ReplicaService {
     rpc decision(Proposal) returns(Empty) {}
+}
+
+// Acceptor Service
+service AcceptorService {
 }

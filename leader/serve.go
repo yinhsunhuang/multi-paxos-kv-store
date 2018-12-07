@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"math/rand"
@@ -13,35 +12,32 @@ import (
 	"github.com/nyu-distributed-systems-fa18/multi-paxos/pb"
 )
 
-func propose(r *Replica, command *pb.Command, peerClients map[string]pb.LeaderServiceClient) {
-	s := r.FindSlot()
-	prop := &pb.Proposal{
-		SlotIdx: s,
-		Command: command}
-	r.AddProposal(prop)
-	for p, c := range peerClients {
-		// Send in parallel so we don't wait for each client.
-		go func(c pb.LeaderServiceClient, p string) {
-			log.Printf("Send Propose RPC to %v", p)
-			c.Propose(context.Background(), prop)
-		}(c, p)
-	}
-}
-
-func connectToPeer(peer string) (pb.LeaderServiceClient, error) {
+func connectToReplica(peer string) (pb.ReplicaServiceClient, error) {
 	backoffConfig := grpc.DefaultBackoffConfig
 	// Choose an aggressive backoff strategy here.
 	backoffConfig.MaxDelay = 500 * time.Millisecond
 	conn, err := grpc.Dial(peer, grpc.WithInsecure(), grpc.WithBackoffConfig(backoffConfig))
 	// Ensure connection did not fail, which should not happen since this happens in the background
 	if err != nil {
-		return pb.NewLeaderServiceClient(nil), err
+		return pb.NewReplicaServiceClient(nil), err
 	}
-	return pb.NewLeaderServiceClient(conn), nil
+	return pb.NewReplicaServiceClient(conn), nil
 }
 
-//RunReplicaServiceServer launches a ReplicaService server
-func RunReplicaServiceServer(r *Replica, port int) {
+func connectToAcceptor(peer string) (pb.AcceptorServiceClient, error) {
+	backoffConfig := grpc.DefaultBackoffConfig
+	// Choose an aggressive backoff strategy here.
+	backoffConfig.MaxDelay = 500 * time.Millisecond
+	conn, err := grpc.Dial(peer, grpc.WithInsecure(), grpc.WithBackoffConfig(backoffConfig))
+	// Ensure connection did not fail, which should not happen since this happens in the background
+	if err != nil {
+		return pb.NewAcceptorServiceClient(nil), err
+	}
+	return pb.NewAcceptorServiceClient(conn), nil
+}
+
+//RunLeaderServiceServer launches a ReplicaService server
+func RunLeaderServiceServer(l *Leader, port int) {
 	// Convert port to a string form
 	portString := fmt.Sprintf(":%d", port)
 	// Create socket that listens on the supplied port
@@ -53,7 +49,7 @@ func RunReplicaServiceServer(r *Replica, port int) {
 	// Create a new GRPC server
 	s := grpc.NewServer()
 
-	pb.RegisterReplicaServiceServer(s, r)
+	pb.RegisterLeaderServiceServer(s, l)
 	log.Printf("Going to listen on port %v", port)
 
 	// Start serving, this will block this function and only return when done.
@@ -62,28 +58,34 @@ func RunReplicaServiceServer(r *Replica, port int) {
 	}
 }
 
-func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
-	replica := NewReplica()
-	go RunReplicaServiceServer(replica, port)
+func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string, port int) {
+	leader := NewLeader()
+	go RunLeaderServiceServer(leader, port)
 
-	peerClients := make(map[string]pb.LeaderServiceClient)
-	for _, peer := range *peers {
-		client, err := connectToPeer(peer)
+	replicaClients := make(map[string]pb.ReplicaServiceClient)
+	for _, peer := range *replicas {
+		client, err := connectToReplica(peer)
 		if err != nil {
 			log.Fatalf("Failed to connect to GRPC server %v", err)
 		}
 
-		peerClients[peer] = client
+		replicaClients[peer] = client
+		log.Printf("Connected to %v", peer)
+	}
+
+	acceptorClients := make(map[string]pb.AcceptorServiceClient)
+	for _, peer := range *acceptors {
+		client, err := connectToAcceptor(peer)
+		if err != nil {
+			log.Fatalf("Failed to connect to GRPC server %v", err)
+		}
+
+		acceptorClients[peer] = client
 		log.Printf("Connected to %v", peer)
 	}
 
 	// serve loop
 	for {
-		select {
-		case op := <-s.C:
-			log.Printf("{%v}", op.command)
-			propose(replica, &op.command, peerClients)
-			s.HandleCommand(op)
-		}
+		select {}
 	}
 }

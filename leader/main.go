@@ -5,20 +5,16 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"net"
 	"os"
 	"time"
-
-	"google.golang.org/grpc"
-
-	"github.com/nyu-distributed-systems-fa18/multi-paxos/pb"
 )
 
 func main() {
 	// Argument parsing
 	var r *rand.Rand
 	var seed int64
-	var peers arrayPeers
+	var replicas arrayPeers
+	var acceptors arrayPeers
 	var clientPort int
 	var paxosPort int
 	flag.Int64Var(&seed, "seed", -1,
@@ -27,7 +23,8 @@ func main() {
 		"Port on which server should listen to client requests")
 	flag.IntVar(&paxosPort, "paxos", 3001,
 		"Port on which server should listen to Paxos requests")
-	flag.Var(&peers, "peer", "A peer for this process")
+	flag.Var(&replicas, "replica", "A replica for this process")
+	flag.Var(&acceptors, "acceptor", "An acceptor for this process")
 	flag.Parse()
 
 	// Initialize the random number generator
@@ -47,28 +44,5 @@ func main() {
 	id := fmt.Sprintf("%s:%d", name, paxosPort)
 	log.Printf("Starting peer with ID %s", id)
 
-	// Convert port to a string form
-	portString := fmt.Sprintf(":%d", clientPort)
-	// Create socket that listens on the supplied port
-	c, err := net.Listen("tcp", portString)
-	if err != nil {
-		// Note the use of Fatalf which will exit the program after reporting the error.
-		log.Fatalf("Could not create listening socket %v", err)
-	}
-	// Create a new GRPC server
-	s := grpc.NewServer()
-
-	// Initialize KVStore
-	store := KVStore{C: make(chan InputChannelType), store: make(map[string]string)}
-	go serve(&store, r, &peers, id, paxosPort)
-
-	// Tell GRPC that s will be serving requests for the KvStore service and should use store (defined on line 23)
-	// as the struct whose methods should be called in response.
-	pb.RegisterKvStoreServer(s, &store)
-	log.Printf("Going to listen on port %v", clientPort)
-	// Start serving, this will block this function and only return when done.
-	if err := s.Serve(c); err != nil {
-		log.Fatalf("Failed to serve %v", err)
-	}
-	log.Printf("Done listening")
+	serve(r, &replicas, &acceptors, id, paxosPort)
 }
