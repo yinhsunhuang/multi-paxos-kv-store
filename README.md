@@ -26,3 +26,6 @@ issue to replicas.
 
 
 # Data Structure
+
+# Notes
+To be consistent with lab2, each client request is treated as a unique one
