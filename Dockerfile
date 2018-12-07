@@ -3,7 +3,7 @@ WORKDIR /go/src/github.com/nyu-distributed-systems-fa18/multi-paxos/
 COPY get.sh .
 RUN sh get.sh
 
-COPY pb .
+COPY pb pb
 
 WORKDIR /go/src/github.com/nyu-distributed-systems-fa18/multi-paxos/replica
 COPY replica .
@@ -17,13 +17,11 @@ COPY leader .
 RUN go get -v ./...
 RUN go install -v ./...
 
-
 WORKDIR /go/src/github.com/nyu-distributed-systems-fa18/multi-paxos/acceptor
 COPY acceptor .
 
 RUN go get -v ./...
 RUN go install -v ./...
 
-
 EXPOSE 3000 3001
-CMD ["server"]
+CMD [""]
