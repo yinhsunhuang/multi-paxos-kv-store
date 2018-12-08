@@ -33,7 +33,17 @@ func (r *Replica) FindSlot() int64 {
 	return idx
 }
 
-func (r *Replica) CheckDecision(cmd *pb.Command) bool {
+func (cmd *pb.Command) Equals(other *pb.Command) bool {
+	return true
+}
+
+func (cmd *pb.PaxosCommand) Equals(other *pb.PaxosCommand) bool {
+	return cmd.ClientId == other.ClientId &&
+		cmd.CommandId == other.CommandId &&
+		cmd.Operation.Equals(other.Operation)
+}
+
+func (r *Replica) CheckDecision(cmd *pb.PaxosCommand) bool {
 	for _, val := range r.decisions {
 		if val.Command == cmd && val.SlotIdx < r.slotNum {
 			return true

@@ -13,7 +13,7 @@ import (
 	"github.com/nyu-distributed-systems-fa18/multi-paxos/pb"
 )
 
-func propose(r *Replica, command *pb.Command, peerClients map[string]pb.LeaderServiceClient) {
+func propose(r *Replica, command *pb.PaxosCommand, peerClients map[string]pb.LeaderServiceClient) {
 	s := r.FindSlot()
 	prop := &pb.Proposal{
 		SlotIdx: s,
@@ -82,7 +82,11 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 		select {
 		case op := <-s.C:
 			log.Printf("{%v}", op.command)
-			propose(replica, &op.command, peerClients)
+			propose(replica,
+				&pb.PaxosCommand{
+					ClientId:  "222",
+					CommandId: 3,
+					Operation: &op.command}, peerClients)
 			s.HandleCommand(op)
 		}
 	}

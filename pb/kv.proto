@@ -79,10 +79,16 @@ message Command {
     }
 }
 
+message PaxosCommand{
+    string clientId = 1;
+    int64 commandId = 2;
+    Command operation = 3;
+}
+
 // Proposal
 message Proposal {
     int64 slotIdx = 1;
-    Command command = 2;
+    PaxosCommand command = 2;
 }
 
 // Leader Service
