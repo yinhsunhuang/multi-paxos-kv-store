@@ -23,23 +23,24 @@ type ReplicaServers struct {
 func (r *ReplicaServers) sendExecCommand(req *pb.PaxosCommand) (*pb.Result, error) {
 	C := make(chan *pb.Result, len(r.replicas))
 	for k, v := range r.replicas {
-		log.Printf("Sending command to {%v}", k)
+		log.Printf("Sending command to %v", k)
 		go func() {
 			res, err := v.ExecuteCommand(context.Background(), req)
 			if err != nil {
-				log.Printf("{%v} exec error", k)
+				log.Printf("%v exec error %v", k, err)
 				C <- nil
 			} else if res.GetRedirect() != nil {
 				log.Printf("Should never receive Redirect")
 				C <- nil
 			} else {
-				log.Printf("Receive execution from {%v}", k)
+				log.Printf("Receive execution from %v", k)
 				C <- res
 			}
 		}()
 	}
 	var ret *pb.Result
-	for ret = <-C; ret == nil; {
+	for ret == nil {
+		ret = <-C
 		log.Printf("Get empty return, continue waiting")
 	}
 	go func() {
@@ -72,6 +73,30 @@ func (r *ReplicaServers) kvGet(key string) string {
 	}
 
 	log.Printf("Got Get response key: \"%v\" value:\"%v\"", res.GetKv().Key, res.GetKv().Value)
+
+	if res.GetKv().Key != key {
+		log.Fatalf("Get returned the wrong key response")
+	}
+	return res.GetKv().Value
+}
+
+func (r *ReplicaServers) kvCAS(key string, expected string, toSet string) string {
+	r.commandId++
+	casReq := &pb.CASArg{Kv: &pb.KeyValue{Key: key, Value: expected}, Value: &pb.Value{Value: toSet}}
+
+	paxosCmd := &pb.PaxosCommand{
+		ClientId:  r.clientId,
+		CommandId: r.commandId,
+		KvOp: &pb.Command{
+			Operation: pb.Op_CAS,
+			Arg: &pb.Command_Cas{
+				Cas: casReq}}}
+	res, err := r.sendExecCommand(paxosCmd)
+	if err != nil {
+		log.Fatalf("Request error %v", err)
+	}
+
+	log.Printf("Got CAS response key: \"%v\" value:\"%v\"", res.GetKv().Key, res.GetKv().Value)
 
 	if res.GetKv().Key != key {
 		log.Fatalf("Get returned the wrong key response")
@@ -115,27 +140,14 @@ func main() {
 	// Request value for hello
 
 	for i := 0; i < 3; i++ {
-
-		prevVal := res.GetKv().Value
+		prevVal := rs.kvGet("hello")
 		// add 1
 		val, _ := strconv.Atoi(prevVal)
 		val += rand.Intn(10)
 		toPut := strconv.Itoa(val)
 		log.Printf("Try putting %v", val)
 		// Successfully CAS changing hello -> +1
-		casReq := &pb.CASArg{Kv: &pb.KeyValue{Key: "hello", Value: prevVal}, Value: &pb.Value{Value: toPut}}
-		res, err = kvc.CAS(context.Background(), casReq)
-		if err != nil {
-			log.Fatalf("Request error %v", err)
-		}
-
-		if res.GetRedirect() != nil {
-			log.Fatalf("Redirect to %v", res.GetRedirect().Server)
-		}
-
-		log.Printf("Got CAS response key: \"%v\" value:\"%v\"", res.GetKv().Key, res.GetKv().Value)
-		if res.GetKv().Key != "hello" {
-			log.Fatalf("Get returned the wrong response")
-		}
+		res := rs.kvCAS("hello", prevVal, toPut)
+		log.Printf("New Value: %v", res)
 	}
 }
