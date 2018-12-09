@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/golang/protobuf/proto"
+
 	"github.com/nyu-distributed-systems-fa18/multi-paxos/pb"
 	context "golang.org/x/net/context"
 )
@@ -33,19 +35,9 @@ func (r *Replica) FindSlot() int64 {
 	return idx
 }
 
-func (cmd *pb.Command) Equals(other *pb.Command) bool {
-	return true
-}
-
-func (cmd *pb.PaxosCommand) Equals(other *pb.PaxosCommand) bool {
-	return cmd.ClientId == other.ClientId &&
-		cmd.CommandId == other.CommandId &&
-		cmd.Operation.Equals(other.Operation)
-}
-
 func (r *Replica) CheckDecision(cmd *pb.PaxosCommand) bool {
 	for _, val := range r.decisions {
-		if val.Command == cmd && val.SlotIdx < r.slotNum {
+		if proto.Equal(val.Command, cmd) && val.SlotIdx < r.slotNum {
 			return true
 		}
 	}

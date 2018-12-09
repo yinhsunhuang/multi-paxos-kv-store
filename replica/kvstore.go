@@ -20,6 +20,14 @@ type KVStore struct {
 	store map[string]string
 }
 
+func (s *KVStore) ExecuteCommand(ctx context.Context, cmd *pb.PaxosCommand) (*pb.Result, error) {
+	c := make(chan pb.Result)
+	s.C <- InputChannelType{command: *cmd.KvOp, response: c}
+	log.Printf("Waiting for Execute response")
+	result := <-c
+	return &result, nil
+}
+
 func (s *KVStore) Get(ctx context.Context, key *pb.Key) (*pb.Result, error) {
 	// Create a channel
 	c := make(chan pb.Result)

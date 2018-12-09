@@ -86,7 +86,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				&pb.PaxosCommand{
 					ClientId:  "222",
 					CommandId: 3,
-					Operation: &op.command}, peerClients)
+					KvOp:      &op.command}, peerClients)
 			s.HandleCommand(op)
 		}
 	}
