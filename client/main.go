@@ -14,12 +14,76 @@ import (
 	"github.com/nyu-distributed-systems-fa18/multi-paxos/pb"
 )
 
+type ReplicaServers struct {
+	clientId  string
+	commandId int64
+	replicas  map[string]pb.KvStoreClient
+}
+
+func (r *ReplicaServers) sendExecCommand(req *pb.PaxosCommand) (*pb.Result, error) {
+	C := make(chan *pb.Result, len(r.replicas))
+	for k, v := range r.replicas {
+		log.Printf("Sending command to {%v}", k)
+		go func() {
+			res, err := v.ExecuteCommand(context.Background(), req)
+			if err != nil {
+				log.Printf("{%v} exec error", k)
+				C <- nil
+			} else if res.GetRedirect() != nil {
+				log.Printf("Should never receive Redirect")
+				C <- nil
+			} else {
+				log.Printf("Receive execution from {%v}", k)
+				C <- res
+			}
+		}()
+	}
+	var ret *pb.Result
+	for ret = <-C; ret == nil; {
+		log.Printf("Get empty return, continue waiting")
+	}
+	go func() {
+		for {
+			select {
+			case <-C:
+				log.Printf("Clear one return")
+			default:
+				break
+			}
+		}
+	}()
+	return ret, nil
+}
+
+func (r *ReplicaServers) kvGet(key string) string {
+	r.commandId++
+	req := &pb.Key{Key: key}
+
+	paxosCmd := &pb.PaxosCommand{
+		ClientId:  r.clientId,
+		CommandId: r.commandId,
+		KvOp: &pb.Command{
+			Operation: pb.Op_GET,
+			Arg: &pb.Command_Get{
+				Get: req}}}
+	res, err := r.sendExecCommand(paxosCmd)
+	if err != nil {
+		log.Fatalf("Request error %v", err)
+	}
+
+	log.Printf("Got Get response key: \"%v\" value:\"%v\"", res.GetKv().Key, res.GetKv().Value)
+
+	if res.GetKv().Key != key {
+		log.Fatalf("Get returned the wrong key response")
+	}
+	return res.GetKv().Value
+}
+
 func usage() {
 	fmt.Printf("Usage %s <endpoint>\n", os.Args[0])
 	flag.PrintDefaults()
 }
 
-// TODO: Deal with redirect
 func main() {
 	// Take endpoint as input
 	flag.Usage = usage
@@ -29,56 +93,28 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
-	endpoint := flag.Args()[0]
-	log.Printf("Connecting to %v", endpoint)
-	// Connect to the server. We use WithInsecure since we do not configure https in this class.
-	conn, err := grpc.Dial(endpoint, grpc.WithInsecure())
-	//Ensure connection did not fail.
-	if err != nil {
-		log.Fatalf("Failed to dial GRPC server %v", err)
+	endpoints := flag.Args()
+	rs := &ReplicaServers{}
+	rs.clientId = "j3kfvlv"
+	replicas := make(map[string]pb.KvStoreClient)
+	for _, endpoint := range endpoints {
+		log.Printf("Connecting to %v", endpoint)
+		// Connect to the server. We use WithInsecure since we do not configure https in this class.
+		conn, err := grpc.Dial(endpoint, grpc.WithInsecure())
+		//Ensure connection did not fail.
+		if err != nil {
+			log.Fatalf("Failed to dial GRPC server %v", err)
+		}
+		log.Printf("Connected")
+		// Create a KvStore client
+		replicas[endpoint] = pb.NewKvStoreClient(conn)
 	}
-	log.Printf("Connected")
-	// Create a KvStore client
-	kvc := pb.NewKvStoreClient(conn)
-	// Clear KVC
-	// log.Printf("Clear kvstore")
-	// res, err := kvc.Clear(context.Background(), &pb.Empty{})
-	// if err != nil {
-	// 	log.Fatalf("Could not clear")
-	// }
-	// if t := res.GetRedirect(); t != nil {
-	// 	log.Fatalf("Got Redirect to %v", t.Server)
-	// }
 
-	// Put setting hello -> 1
-	// putReq := &pb.KeyValue{Key: "hello", Value: "1"}
-	// res, err = kvc.Set(context.Background(), putReq)
-	// if err != nil {
-	// 	log.Fatalf("Put error")
-	// }
-	// log.Printf("Got response key: \"%v\" value:\"%v\"", res.GetKv().Key, res.GetKv().Value)
-	// if res.GetKv().Key != "hello" || res.GetKv().Value != "1" {
-	// 	log.Fatalf("Put returned the wrong response")
-	// }
+	rs.replicas = replicas
 
 	// Request value for hello
 
 	for i := 0; i < 3; i++ {
-		req := &pb.Key{Key: "hello"}
-		res, err := kvc.Get(context.Background(), req)
-		if err != nil {
-			log.Fatalf("Request error %v", err)
-		}
-
-		if res.GetRedirect() != nil {
-			log.Fatalf("Redirect to %v", res.GetRedirect().Server)
-		}
-
-		log.Printf("Got Get response key: \"%v\" value:\"%v\"", res.GetKv().Key, res.GetKv().Value)
-
-		if res.GetKv().Key != "hello" {
-			log.Fatalf("Get returned the wrong response")
-		}
 
 		prevVal := res.GetKv().Value
 		// add 1
