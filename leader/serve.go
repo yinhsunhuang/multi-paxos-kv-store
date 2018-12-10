@@ -86,6 +86,9 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 
 	// serve loop
 	for {
-		select {}
+		select {
+		case prop := <-leader.proposeChan:
+
+		}
 	}
 }

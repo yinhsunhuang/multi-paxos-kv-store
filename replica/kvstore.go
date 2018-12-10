@@ -14,15 +14,22 @@ type InputChannelType struct {
 	response chan pb.Result
 }
 
+type PaxosCommandInputChannelType struct {
+	command  *pb.PaxosCommand
+	response chan pb.Result
+}
+
 // The struct for key value stores.
 type KVStore struct {
 	C     chan InputChannelType
+	Q     chan PaxosCommandInputChannelType
 	store map[string]string
 }
 
 func (s *KVStore) ExecuteCommand(ctx context.Context, cmd *pb.PaxosCommand) (*pb.Result, error) {
+	log.Printf("Receive command #%v from client: %v", cmd.CommandId, cmd.ClientId)
 	c := make(chan pb.Result)
-	s.C <- InputChannelType{command: *cmd.KvOp, response: c}
+	s.Q <- PaxosCommandInputChannelType{command: cmd, response: c}
 	log.Printf("Waiting for Execute response")
 	result := <-c
 	return &result, nil

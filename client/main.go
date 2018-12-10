@@ -22,21 +22,21 @@ type ReplicaServers struct {
 
 func (r *ReplicaServers) sendExecCommand(req *pb.PaxosCommand) (*pb.Result, error) {
 	C := make(chan *pb.Result, len(r.replicas))
-	for k, v := range r.replicas {
-		log.Printf("Sending command to %v", k)
-		go func() {
-			res, err := v.ExecuteCommand(context.Background(), req)
+	for peer, client := range r.replicas {
+		go func(p string, c pb.KvStoreClient) {
+			log.Printf("Sending command to %v, %v", p, c)
+			res, err := c.ExecuteCommand(context.Background(), req)
 			if err != nil {
-				log.Printf("%v exec error %v", k, err)
+				log.Printf("%v exec error %v", p, err)
 				C <- nil
 			} else if res.GetRedirect() != nil {
 				log.Printf("Should never receive Redirect")
 				C <- nil
 			} else {
-				log.Printf("Receive execution from %v", k)
+				log.Printf("Receive execution from %v", p)
 				C <- res
 			}
-		}()
+		}(peer, client)
 	}
 	var ret *pb.Result
 	for ret == nil {

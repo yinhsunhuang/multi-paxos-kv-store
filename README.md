@@ -29,3 +29,7 @@ issue to replicas.
 
 # Notes
 To be consistent with lab2, each client request is treated as a unique one
+
+# Program Logic
+## Replica
+Index response by Key as ClientId + CommandId

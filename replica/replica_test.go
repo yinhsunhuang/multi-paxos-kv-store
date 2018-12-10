@@ -22,6 +22,10 @@ func TestPbEqual(t *testing.T) {
 		t.Errorf("pb1, pb2 not equal")
 	}
 
+	if !proto.Equal(*pb1, *pb2) {
+		t.Errorf("pb1, pb2 not equal")
+	}
+
 	if pb1 == pb2 {
 		t.Errorf("pb1, pb2 should not be literally equal")
 	}

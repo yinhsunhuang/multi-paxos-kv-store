@@ -11,6 +11,12 @@ type Replica struct {
 	slotNum   int64
 	proposals []*pb.Proposal
 	decisions []*pb.Proposal
+
+	decisionChan chan DecisionInputType
+}
+
+type DecisionInputType struct {
+	decision *pb.Proposal
 }
 
 func (r *Replica) FindSlot() int64 {
@@ -44,6 +50,16 @@ func (r *Replica) CheckDecision(cmd *pb.PaxosCommand) bool {
 	return false
 }
 
+// CheckCurrentSlotNum returns true if \exists c s.t. <slotNum, c> \in decisions. Current Implementation is O(n)
+func (r *Replica) CheckCurrentSlotNum() bool {
+	for _, v := range r.decisions {
+		if v.SlotIdx == r.slotNum {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Replica) AddProposal(prop *pb.Proposal) {
 	r.proposals = append(r.proposals, prop)
 }
@@ -58,9 +74,12 @@ func NewReplica() *Replica {
 	ret.slotNum = 1
 	ret.proposals = make([]*pb.Proposal, 0, 5)
 	ret.decisions = make([]*pb.Proposal, 0, 5)
+
+	ret.decisionChan = make(chan DecisionInputType)
 	return &ret
 }
 
 func (r *Replica) Decision(ctx context.Context, in *pb.Proposal) (*pb.Empty, error) {
+	r.decisionChan <- DecisionInputType{decision: in}
 	return &pb.Empty{}, nil
 }
