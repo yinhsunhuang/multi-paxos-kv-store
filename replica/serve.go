@@ -85,8 +85,7 @@ func getStringRepresent(cmd *pb.PaxosCommand) string {
 	return cmd.ClientId + strconv.FormatInt(cmd.CommandId, 10)
 }
 
-func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
-	replica := NewReplica()
+func serve(s *KVStore, replica *Replica, r *rand.Rand, peers *arrayPeers, id string, port int) {
 	go RunReplicaServiceServer(replica, port)
 
 	leaders := make(map[string]pb.LeaderServiceClient)
@@ -114,7 +113,7 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 			propose(replica,
 				pOp.command, leaders)
 		case decision := <-replica.decisionChan:
-			log.Printf("Receive decision %v", decision)
+			log.Printf("Receive decision %v", decision.decision)
 			for replica.CheckCurrentSlotNum() {
 				for _, v := range replica.proposals {
 					if v.SlotIdx == replica.slotNum && !proto.Equal(v.Command, decision.decision) {
@@ -128,6 +127,9 @@ func serve(s *KVStore, r *rand.Rand, peers *arrayPeers, id string, port int) {
 				log.Fatalf("No such response channel")
 			}
 			perform(replica, s, decision.decision.Command, leaders, respChan)
+		case <-replica.quitChan:
+			log.Printf("Quit the serve loop")
+			break
 		}
 	}
 }

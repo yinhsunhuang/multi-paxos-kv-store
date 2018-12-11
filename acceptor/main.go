@@ -31,6 +31,7 @@ func main() {
 	} else {
 		r = rand.New(rand.NewSource(seed))
 	}
+	acceptor := NewAcceptor()
 
 	// Get hostname
 	name, err := os.Hostname()
@@ -42,5 +43,5 @@ func main() {
 	id := fmt.Sprintf("%s:%d", name, paxosPort)
 	log.Printf("Starting acceptor with ID %s", id)
 
-	serve(r, &leaders, id, paxosPort)
+	serve(acceptor, r, &leaders, id, paxosPort)
 }

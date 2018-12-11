@@ -1,7 +1,9 @@
 package main
 
 import (
+	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/nyu-distributed-systems-fa18/multi-paxos/pb"
@@ -19,10 +21,6 @@ func TestPbEqual(t *testing.T) {
 			KvOp: &pb.Command{Operation: pb.Op_GET, Arg: &pb.Command_Get{
 				Get: &pb.Key{Key: "Hello"}}}}}
 	if !proto.Equal(pb1, pb2) {
-		t.Errorf("pb1, pb2 not equal")
-	}
-
-	if !proto.Equal(*pb1, *pb2) {
 		t.Errorf("pb1, pb2 not equal")
 	}
 
@@ -139,5 +137,54 @@ func TestCheckDecision(t *testing.T) {
 	exists = r.CheckDecision(pro2.Command)
 	if exists {
 		t.Errorf("should be false")
+	}
+}
+
+func TestServeLoopDecisionMsg(t *testing.T) {
+	store := KVStore{C: make(chan InputChannelType), Q: make(chan PaxosCommandInputChannelType), store: make(map[string]string)}
+	replica := NewReplica()
+	clientId := "123zcv"
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	leaders := arrayPeers([]string{})
+	go serve(&store, replica, r, &leaders, "replica1", 3001)
+	pCmd := &pb.PaxosCommand{ClientId: clientId,
+		CommandId: 1,
+		KvOp: &pb.Command{Operation: pb.Op_GET, Arg: &pb.Command_Get{
+			Get: &pb.Key{Key: "Hello"}}}}
+	pCmd2 := &pb.PaxosCommand{ClientId: clientId,
+		CommandId: 1,
+		KvOp: &pb.Command{Operation: pb.Op_GET, Arg: &pb.Command_Get{
+			Get: &pb.Key{Key: "Hello"}}}}
+	res := make(chan pb.Result)
+	store.Q <- PaxosCommandInputChannelType{
+		command:  pCmd,
+		response: res}
+	replica.decisionChan <- DecisionInputType{
+		decision: &pb.Proposal{
+			SlotIdx: 1,
+			Command: pCmd2}}
+	ret := <-res
+	if ret.GetKv().Key != "Hello" || ret.GetKv().Value != "" {
+		t.Errorf("Return error")
+	}
+
+	pCmd = &pb.PaxosCommand{ClientId: clientId,
+		CommandId: 2,
+		KvOp: &pb.Command{Operation: pb.Op_SET, Arg: &pb.Command_Set{
+			Set: &pb.KeyValue{Key: "Hello", Value: "World"}}}}
+	pCmd2 = &pb.PaxosCommand{ClientId: clientId,
+		CommandId: 2,
+		KvOp: &pb.Command{Operation: pb.Op_SET, Arg: &pb.Command_Set{
+			Set: &pb.KeyValue{Key: "Hello", Value: "World"}}}}
+	store.Q <- PaxosCommandInputChannelType{
+		command:  pCmd,
+		response: res}
+	replica.decisionChan <- DecisionInputType{
+		decision: &pb.Proposal{
+			SlotIdx: 1,
+			Command: pCmd2}}
+	ret = <-res
+	if ret.GetKv().Key != "Hello" || ret.GetKv().Value != "World" {
+		t.Errorf("Return error")
 	}
 }

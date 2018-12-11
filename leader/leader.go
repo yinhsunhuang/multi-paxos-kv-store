@@ -21,6 +21,16 @@ func NewLeader() *Leader {
 // Propose TODO
 func (r *Leader) Propose(ctx context.Context, in *pb.Proposal) (*pb.Empty, error) {
 	log.Printf("Receive Propose RPC call")
-	proposeChan <- in
+	r.proposeChan <- in
+	return &pb.Empty{}, nil
+}
+
+func (r *Leader) phaseOneB(ctx context.Context, in *pb.PhaseOneBArg) (*pb.Empty, error) {
+	log.Printf("Receive phaseOneB RPC call")
+	return &pb.Empty{}, nil
+}
+
+func (r *Leader) phaseTwoB(ctx context.Context, in *pb.PhaseTwoBArg) (*pb.Empty, error) {
+	log.Printf("Receive phaseTwoB RPC call")
 	return &pb.Empty{}, nil
 }

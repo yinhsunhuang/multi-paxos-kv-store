@@ -92,10 +92,29 @@ message Proposal {
     PaxosCommand command = 2;
 }
 
+message Pvalue {
+    BallotNum ballotIdx = 1;
+    int64 slotIdx = 2;
+    PaxosCommand command = 3;
+}
+
 // Leader Service
 service LeaderService {
     rpc propose(Proposal) returns(Empty) {}
     // add synod protocol
+    rpc phaseOneB(PhaseOneBArg) returns(Empty) {}
+    rpc phaseTwoB(PhaseTwoBArg) returns(Empty) {}
+}
+
+message PhaseOneBArg{
+    string acceptorId = 1;
+    BallotNum ballotNum = 2;
+    repeated Pvalue accepted = 3;
+}
+
+message PhaseTwoBArg{
+    string acceptorId = 1;
+    BallotNum ballotNum = 2;
 }
 
 // Replica Service
@@ -105,4 +124,21 @@ service ReplicaService {
 
 // Acceptor Service
 service AcceptorService {
+    rpc phaseOneA(PhaseOneArg) returns(Empty) {}
+    rpc phaseTwoA(PhaseTwoArg) returns(Empty) {}
+}
+
+message BallotNum{
+    int64 ballotIdx = 1;
+    string leaderId = 2;   
+}
+
+message PhaseOneArg {
+    string leaderId = 1;
+    BallotNum ballotNum = 2;
+}
+
+message PhaseTwoArg{
+    string leaderId = 1;
+    Pvalue pv = 2;
 }

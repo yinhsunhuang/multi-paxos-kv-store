@@ -13,6 +13,7 @@ type Replica struct {
 	decisions []*pb.Proposal
 
 	decisionChan chan DecisionInputType
+	quitChan     chan bool
 }
 
 type DecisionInputType struct {

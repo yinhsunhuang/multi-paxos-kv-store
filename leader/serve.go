@@ -88,7 +88,7 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 	for {
 		select {
 		case prop := <-leader.proposeChan:
-
+			log.Printf("%v", prop)
 		}
 	}
 }

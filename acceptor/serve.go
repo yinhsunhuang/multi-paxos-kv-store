@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math/rand"
 	"net"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc"
 
 	"github.com/nyu-distributed-systems-fa18/multi-paxos/pb"
@@ -46,8 +48,19 @@ func RunAcceptorServiceServer(acc *Acceptor, port int) {
 	}
 }
 
-func serve(r *rand.Rand, leaders *arrayPeers, id string, port int) {
-	acceptor := NewAcceptor()
+func BallotNumLessThan(bn *pb.BallotNum, other *pb.BallotNum) bool {
+	if bn.BallotIdx != other.BallotIdx {
+		return bn.BallotIdx < other.BallotIdx
+	}
+	for i := 0; i < len(bn.LeaderId) && i < len(other.LeaderId); i++ {
+		if bn.LeaderId[i] < other.LeaderId[i] {
+			return true
+		}
+	}
+	return len(bn.LeaderId) < len(other.LeaderId)
+}
+
+func serve(acceptor *Acceptor, r *rand.Rand, leaders *arrayPeers, id string, port int) {
 	go RunAcceptorServiceServer(acceptor, port)
 
 	leaderClients := make(map[string]pb.LeaderServiceClient)
@@ -63,6 +76,46 @@ func serve(r *rand.Rand, leaders *arrayPeers, id string, port int) {
 
 	// serve loop
 	for {
-		select {}
+		select {
+		case pOne := <-acceptor.phaseOneChan:
+			log.Printf("Processing Phase One A Msg %v", pOne)
+			if BallotNumLessThan(acceptor.ballotNum, pOne.BallotNum) &&
+				!proto.Equal(acceptor.ballotNum, pOne.BallotNum) {
+				log.Printf("Update ballot num")
+				acceptor.ballotNum = pOne.BallotNum
+			}
+			log.Printf("Sending leaders p1b message with argument:")
+			arg := &pb.PhaseOneBArg{
+				AcceptorId: id,
+				BallotNum:  acceptor.ballotNum,
+				Accepted:   acceptor.accepted}
+			for p, c := range leaderClients {
+				// Send in parallel so we don't wait for each client.
+				go func(c pb.LeaderServiceClient, p string) {
+					log.Printf("Send PhaseOneB RPC to %v", p)
+					log.Printf("with arg: %v", arg)
+					c.PhaseOneB(context.Background(), arg)
+				}(c, p)
+			}
+		case pTwo := <-acceptor.phaseTwoChan:
+			log.Printf("Processing Phase Two A Msg %v", pTwo)
+			if !BallotNumLessThan(pTwo.Pv.BallotIdx, acceptor.ballotNum) {
+				log.Printf("Update ballot num and accepted")
+				acceptor.ballotNum = pTwo.Pv.BallotIdx
+				log.Printf("Adding %v pvalue to accepted", pTwo.Pv)
+				acceptor.AddAccepted(pTwo.Pv)
+			}
+			arg := &pb.PhaseTwoBArg{
+				AcceptorId: id,
+				BallotNum:  acceptor.ballotNum}
+			for p, c := range leaderClients {
+				// Send in parallel so we don't wait for each client.
+				go func(c pb.LeaderServiceClient, p string) {
+					log.Printf("Send PhaseTwoB RPC to %v", p)
+					log.Printf("with arg: %v", arg)
+					c.PhaseTwoB(context.Background(), arg)
+				}(c, p)
+			}
+		}
 	}
 }
