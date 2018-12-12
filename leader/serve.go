@@ -38,6 +38,18 @@ func connectToAcceptor(peer string) (pb.AcceptorServiceClient, error) {
 	return pb.NewAcceptorServiceClient(conn), nil
 }
 
+func connectToLeader(peer string) (pb.LeaderServiceClient, error) {
+	backoffConfig := grpc.DefaultBackoffConfig
+	// Choose an aggressive backoff strategy here.
+	backoffConfig.MaxDelay = 500 * time.Millisecond
+	conn, err := grpc.Dial(peer, grpc.WithInsecure(), grpc.WithBackoffConfig(backoffConfig))
+	// Ensure connection did not fail, which should not happen since this happens in the background
+	if err != nil {
+		return pb.NewLeaderServiceClient(nil), err
+	}
+	return pb.NewLeaderServiceClient(conn), nil
+}
+
 //RunLeaderServiceServer launches a ReplicaService server
 func RunLeaderServiceServer(l *Leader, port int) {
 	// Convert port to a string form
@@ -114,7 +126,7 @@ func randomDuration(r *rand.Rand) time.Duration {
 	return time.Duration(r.Intn(DurationMax-DurationMin)+DurationMin) * time.Millisecond
 }
 
-func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string, port int) {
+func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, leaders *arrayPeers, id string, port int) {
 	leader := NewLeader(id)
 	go RunLeaderServiceServer(leader, port)
 
@@ -139,11 +151,24 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 		acceptorClients[peer] = client
 		log.Printf("Connected to %v", peer)
 	}
+
+	leaderClients := make(map[string]pb.LeaderServiceClient)
+	for _, peer := range *leaders {
+		client, err := connectToLeader(peer)
+		if err != nil {
+			log.Fatalf("Failed to connect to GRPC server %v", err)
+		}
+
+		leaderClients[peer] = client
+		log.Printf("Connected to %v", peer)
+	}
+
 	var scoutBallotNum *pb.BallotNum
 	scoutPvalue := make([]*pb.Pvalue, 0, 0)
 	scoutWaitFor := make(map[string]bool)
 
 	commanderWaitFor := make(map[string]bool)
+	timer := time.NewTimer(randomDuration(r))
 
 	// serve loop
 	// Spawn scout
@@ -156,6 +181,12 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 	for {
 		log.Printf("Waiting")
 		select {
+		case <-timer.C:
+			log.Printf("Timeout")
+			log.Printf("Pinging")
+		case q := <-leader.pingChan:
+			log.Printf("Pong")
+			q.response <- leader.active
 		case prop := <-leader.proposeChan:
 			log.Printf("Processing  Propose Message: %v", prop)
 			for _, v := range leader.proposals {

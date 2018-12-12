@@ -14,6 +14,7 @@ type Leader struct {
 	active    bool
 	proposals []*pb.Proposal
 
+	pingChan      chan PingInputType
 	proposeChan   chan *pb.Proposal
 	adoptedChan   chan AdoptedInputType
 	preemptedChan chan *pb.BallotNum
@@ -23,6 +24,10 @@ type Leader struct {
 
 	scoutArg     *pb.BallotNum
 	commanderArg []*pb.Pvalue
+}
+
+type PingInputType struct {
+	response chan bool
 }
 
 type AdoptedInputType struct {
@@ -35,6 +40,7 @@ func NewLeader(id string) *Leader {
 	ret := Leader{ballotNum: &pb.BallotNum{BallotIdx: 0, LeaderId: id},
 		proposeChan:   make(chan *pb.Proposal),
 		active:        false,
+		pingChan:      make(chan PingInputType),
 		proposals:     make([]*pb.Proposal, 0, 5),
 		adoptedChan:   make(chan AdoptedInputType, 1),
 		preemptedChan: make(chan *pb.BallotNum, 1),
@@ -110,6 +116,15 @@ func (l *Leader) Propose(ctx context.Context, in *pb.Proposal) (*pb.Empty, error
 	log.Printf("Receive Propose RPC call")
 	l.proposeChan <- in
 	return &pb.Empty{}, nil
+}
+
+func (l *Leader) Ping(ctx context.Context, in *pb.Empty) (*pb.PingResult, error) {
+	log.Printf("Receive Ping RPC call")
+	C := make(chan bool)
+	l.pingChan <- PingInputType{
+		response: C}
+	ret := <-C
+	return &pb.PingResult{IsLeader: ret}, nil
 }
 
 func (l *Leader) PhaseOneB(ctx context.Context, in *pb.PhaseOneBArg) (*pb.Empty, error) {

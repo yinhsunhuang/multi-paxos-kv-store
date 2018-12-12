@@ -14,6 +14,7 @@ func main() {
 	var r *rand.Rand
 	var seed int64
 	var replicas arrayPeers
+	var leaders arrayPeers
 	var acceptors arrayPeers
 	var clientPort int
 	var paxosPort int
@@ -25,6 +26,7 @@ func main() {
 		"Port on which server should listen to Paxos requests")
 	flag.Var(&replicas, "replica", "A replica for this process")
 	flag.Var(&acceptors, "acceptor", "An acceptor for this process")
+	flag.Var(&leaders, "leader", "An acceptor for this process")
 	flag.Parse()
 
 	// Initialize the random number generator
@@ -44,5 +46,5 @@ func main() {
 	id := fmt.Sprintf("%s:%d", name, paxosPort)
 	log.Printf("Starting peer with ID %s", id)
 
-	serve(r, &replicas, &acceptors, id, paxosPort)
+	serve(r, &replicas, &acceptors, &leaders, id, paxosPort)
 }

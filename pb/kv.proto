@@ -98,12 +98,17 @@ message Pvalue {
     PaxosCommand command = 3;
 }
 
+message PingResult {
+    bool isLeader = 1;
+}
+
 // Leader Service
 service LeaderService {
     rpc propose(Proposal) returns(Empty) {}
     // add synod protocol
     rpc phaseOneB(PhaseOneBArg) returns(Empty) {}
     rpc phaseTwoB(PhaseTwoBArg) returns(Empty) {}
+    rpc ping(Empty) returns(PingResult) {}
 }
 
 message PhaseOneBArg{

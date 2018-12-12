@@ -70,7 +70,7 @@ def boot_pod_replica(v1, pod_spec, service_spec, name, leaders):
         print("Could not launch pod or service")
         raise
 
-def boot_pod_leader(v1, pod_spec, service_spec, name, replicas, acceptors):
+def boot_pod_leader(v1, pod_spec, service_spec, name, replicas, acceptors, leaders):
     """Boot a single pod of leader"""
     pod_spec = copy.deepcopy(pod_spec)
     # Create a pod spec for this pod.
@@ -86,6 +86,12 @@ def boot_pod_leader(v1, pod_spec, service_spec, name, replicas, acceptors):
     for acceptor in acceptors:
         args.append('-acceptor')
         args.append('%s:3001'%acceptor)
+
+    for leader in leaders:
+        if leader == name:
+            continue
+        args.append('-leader')
+        args.append('%s:3001'%leader)
 
     pod_spec['spec']['containers'][0]['command'] = args
 
@@ -169,7 +175,7 @@ def boot(args):
             boot_pod_replica(v1, pod_spec, service_spec, replica, leaders)
 
         for leader in leaders:
-            boot_pod_leader(v1, pod_spec, service_spec, leader, replicas, acceptors)
+            boot_pod_leader(v1, pod_spec, service_spec, leader, replicas, acceptors, leaders)
 
         for acceptor in acceptors:
             boot_pod_acceptor(v1, pod_spec, service_spec, acceptor, leaders)
