@@ -104,6 +104,13 @@ func (l *Leader) sendReplicasDecision(id string, replicaClients map[string]pb.Re
 	}
 }
 
+func randomDuration(r *rand.Rand) time.Duration {
+	// Constant
+	const DurationMax = 4000
+	const DurationMin = 1000
+	return time.Duration(r.Intn(DurationMax-DurationMin)+DurationMin) * time.Millisecond
+}
+
 func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string, port int) {
 	leader := NewLeader(id)
 	go RunLeaderServiceServer(leader, port)
@@ -141,6 +148,9 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 	for k := range acceptorClients {
 		scoutWaitFor[k] = true
 	}
+
+	time.Sleep(randomDuration(r))
+
 	leader.sendAcceptorsPhaseOneA(id, acceptorClients, *leader.ballotNum)
 	log.Printf("Serve loop start")
 	for {
@@ -194,7 +204,7 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 				leader.sendAcceptorsPhaseOneA(id, acceptorClients, *leader.ballotNum)
 			}
 		case pOne := <-leader.phaseOneChan:
-			log.Printf("Processing PhaseOneB")
+			log.Printf("Processing PhaseOneB %v", pOne)
 			if leader.scoutArg != nil {
 				// Scout is active
 				if proto.Equal(pOne.BallotNum, leader.ballotNum) {
@@ -213,6 +223,7 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 						leader.scoutArg = nil
 					}
 				} else {
+					log.Printf("BallotNum not equal, sending preempted msg")
 					leader.preemptedChan <- pOne.BallotNum
 					leader.scoutArg = nil
 				}
@@ -220,7 +231,7 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 				log.Printf("Scout is not active")
 			}
 		case pTwo := <-leader.phaseTwoChan:
-			log.Printf("Processing PhaseTwoB")
+			log.Printf("Processing PhaseTwoB %v", pTwo)
 			if leader.commanderArg != nil {
 				if proto.Equal(pTwo.BallotNum, leader.ballotNum) {
 					delete(commanderWaitFor, pTwo.AcceptorId)

@@ -85,7 +85,6 @@ func serve(acceptor *Acceptor, r *rand.Rand, leaders *arrayPeers, id string, por
 				log.Printf("Update ballot num")
 				acceptor.ballotNum = pOne.BallotNum
 			}
-			log.Printf("Sending leaders p1b message with argument:")
 			arg := &pb.PhaseOneBArg{
 				AcceptorId: id,
 				BallotNum:  acceptor.ballotNum,

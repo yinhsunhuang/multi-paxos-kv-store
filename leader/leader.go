@@ -33,14 +33,15 @@ type AdoptedInputType struct {
 // NewLeader TODO
 func NewLeader(id string) *Leader {
 	ret := Leader{ballotNum: &pb.BallotNum{BallotIdx: 0, LeaderId: id},
-		proposeChan:  make(chan *pb.Proposal),
-		active:       false,
-		proposals:    make([]*pb.Proposal, 0, 5),
-		adoptedChan:  make(chan AdoptedInputType, 1),
-		phaseOneChan: make(chan *pb.PhaseOneBArg),
-		phaseTwoChan: make(chan *pb.PhaseTwoBArg),
-		scoutArg:     nil,
-		commanderArg: nil}
+		proposeChan:   make(chan *pb.Proposal),
+		active:        false,
+		proposals:     make([]*pb.Proposal, 0, 5),
+		adoptedChan:   make(chan AdoptedInputType, 1),
+		preemptedChan: make(chan *pb.BallotNum, 1),
+		phaseOneChan:  make(chan *pb.PhaseOneBArg),
+		phaseTwoChan:  make(chan *pb.PhaseTwoBArg),
+		scoutArg:      nil,
+		commanderArg:  nil}
 	return &ret
 }
 

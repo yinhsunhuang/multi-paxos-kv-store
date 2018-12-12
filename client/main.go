@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"time"
 
 	context "golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -26,33 +27,21 @@ func (r *ReplicaServers) sendExecCommand(req *pb.PaxosCommand) (*pb.Result, erro
 		go func(p string, c pb.KvStoreClient) {
 			log.Printf("Sending command to %v, %v", p, c)
 			res, err := c.ExecuteCommand(context.Background(), req)
-			if err != nil {
-				log.Printf("%v exec error %v", p, err)
-				C <- nil
-			} else if res.GetRedirect() != nil {
-				log.Printf("Should never receive Redirect")
-				C <- nil
-			} else {
-				log.Printf("Receive execution from %v", p)
-				C <- res
+			for {
+				if err != nil {
+					log.Printf("%v exec error %v", p, err)
+					res, err = c.ExecuteCommand(context.Background(), req)
+				} else if res.GetRedirect() != nil {
+					log.Fatalf("Should never receive Redirect")
+				} else {
+					log.Printf("Receive execution from %v", p)
+					C <- res
+					break
+				}
 			}
 		}(peer, client)
 	}
-	var ret *pb.Result
-	for ret == nil {
-		ret = <-C
-		log.Printf("Get empty return, continue waiting")
-	}
-	go func() {
-		for {
-			select {
-			case <-C:
-				log.Printf("Clear one return")
-			default:
-				break
-			}
-		}
-	}()
+	var ret *pb.Result = <-C
 	return ret, nil
 }
 
@@ -109,6 +98,15 @@ func usage() {
 	flag.PrintDefaults()
 }
 
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+func RandStringBytes(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return string(b)
+}
 func main() {
 	// Take endpoint as input
 	flag.Usage = usage
@@ -120,7 +118,10 @@ func main() {
 	}
 	endpoints := flag.Args()
 	rs := &ReplicaServers{}
-	rs.clientId = "j3kfvlv"
+
+	rand.Seed(time.Now().UTC().UnixNano())
+
+	rs.clientId = RandStringBytes(6)
 	replicas := make(map[string]pb.KvStoreClient)
 	for _, endpoint := range endpoints {
 		log.Printf("Connecting to %v", endpoint)
@@ -143,10 +144,11 @@ func main() {
 		prevVal := rs.kvGet("hello")
 		// add 1
 		val, _ := strconv.Atoi(prevVal)
-		val += rand.Intn(10)
+		val += rand.Intn(10) + 1
 		toPut := strconv.Itoa(val)
 		log.Printf("Try putting %v", val)
 		// Successfully CAS changing hello -> +1
+		// time.Sleep(1 * time.Second)
 		res := rs.kvCAS("hello", prevVal, toPut)
 		log.Printf("New Value: %v", res)
 	}
