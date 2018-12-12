@@ -68,6 +68,7 @@ func (l *Leader) sendAcceptorsPhaseOneA(id string, acceptorClients map[string]pb
 				LeaderId:  id,
 				BallotNum: &b})
 			for err != nil {
+				time.Sleep(10 * time.Millisecond)
 				_, err = c.PhaseOneA(context.Background(), &pb.PhaseOneArg{
 					LeaderId:  id,
 					BallotNum: &b})
@@ -84,6 +85,7 @@ func (l *Leader) sendAcceptorsPhaseTwoA(id string, acceptorClients map[string]pb
 				LeaderId: id,
 				Pv:       &pv})
 			for err != nil {
+				time.Sleep(10 * time.Millisecond)
 				_, err = c.PhaseTwoA(context.Background(), &pb.PhaseTwoArg{
 					LeaderId: id,
 					Pv:       &pv})
@@ -98,6 +100,7 @@ func (l *Leader) sendReplicasDecision(id string, replicaClients map[string]pb.Re
 			log.Printf("Send Decision RPC to %v", p)
 			_, err := c.Decision(context.Background(), &prop)
 			for err != nil {
+				time.Sleep(10 * time.Millisecond)
 				_, err = c.Decision(context.Background(), &prop)
 			}
 		}(c, p)
@@ -148,9 +151,6 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 	for k := range acceptorClients {
 		scoutWaitFor[k] = true
 	}
-
-	time.Sleep(randomDuration(r))
-
 	leader.sendAcceptorsPhaseOneA(id, acceptorClients, *leader.ballotNum)
 	log.Printf("Serve loop start")
 	for {
@@ -187,6 +187,9 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 			for k := range acceptorClients {
 				commanderWaitFor[k] = true
 			}
+			if len(leader.commanderArg) > 0 {
+				leader.sendAcceptorsPhaseTwoA(id, acceptorClients, *leader.commanderArg[0])
+			}
 			log.Printf("Leader Activated")
 			leader.active = true
 		case preempted := <-leader.preemptedChan:
@@ -194,8 +197,9 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 			if BallotNumLessThan(leader.ballotNum, preempted) {
 				log.Printf("Found greater ballot_num, return to passive mode")
 				leader.active = false
-				leader.ballotNum = &pb.BallotNum{BallotIdx: leader.ballotNum.BallotIdx + 1,
+				leader.ballotNum = &pb.BallotNum{BallotIdx: preempted.BallotIdx + 1,
 					LeaderId: leader.ballotNum.LeaderId}
+				log.Printf("Set BallotNum to %v", leader.ballotNum)
 				// Spawn scout
 				leader.scoutArg = leader.ballotNum
 				for k := range acceptorClients {
@@ -214,7 +218,7 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 					log.Printf("Before deletion %v %v", scoutWaitFor, len(scoutWaitFor))
 					delete(scoutWaitFor, pOne.AcceptorId)
 					log.Printf("After deletion %v %v", scoutWaitFor, len(scoutWaitFor))
-					if len(scoutWaitFor) < acceptors.Num()/2 {
+					if len(scoutWaitFor) < (acceptors.Num()+1)/2 {
 						leader.adoptedChan <- AdoptedInputType{
 							ballotNum: scoutBallotNum,
 							pvals:     scoutPvalue}
@@ -234,8 +238,10 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 			log.Printf("Processing PhaseTwoB %v", pTwo)
 			if leader.commanderArg != nil {
 				if proto.Equal(pTwo.BallotNum, leader.ballotNum) {
+					log.Printf("Before deletion %v %v", commanderWaitFor, len(commanderWaitFor))
 					delete(commanderWaitFor, pTwo.AcceptorId)
-					if len(commanderWaitFor) < acceptors.Num()/2 {
+					log.Printf("After deletion %v %v", commanderWaitFor, len(commanderWaitFor))
+					if len(commanderWaitFor) < (acceptors.Num()+1)/2 {
 						// Send decision to replicas
 						leader.sendReplicasDecision(id, replicaClients, pb.Proposal{
 							SlotIdx: leader.commanderArg[0].SlotIdx,
@@ -253,7 +259,7 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 				} else {
 					log.Printf("Stopping Commander thread")
 					leader.preemptedChan <- pTwo.BallotNum
-					if len(leader.commanderArg) != 1 {
+					if len(leader.commanderArg) > 1 {
 						leader.commanderArg = leader.commanderArg[1:]
 						for k := range acceptorClients {
 							commanderWaitFor[k] = true

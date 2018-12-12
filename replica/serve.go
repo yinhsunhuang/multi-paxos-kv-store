@@ -127,6 +127,8 @@ func serve(s *KVStore, replica *Replica, r *rand.Rand, peers *arrayPeers, id str
 				log.Printf("No such response channel")
 			}
 			perform(replica, s, decision.decision.Command, leaders, respChan)
+			log.Printf("Delete response chan")
+			delete(responseMap, getStringRepresent(decision.decision.Command))
 		case <-replica.quitChan:
 			log.Printf("Quit the serve loop")
 			break

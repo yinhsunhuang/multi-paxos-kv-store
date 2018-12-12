@@ -178,7 +178,7 @@ def kill(args):
     """Kill selected peer"""
     v1 = init()
     pods = find_pods(v1)
-    peer = 'peer%d'%args.peer
+    peer = args.peer
     pod = list(filter(lambda i: i.metadata.name == peer, pods))
     if len(pod) != 1:
         sys.exit(1)
@@ -237,7 +237,7 @@ def main():
     run_parser.set_defaults(func = boot)
 
     kill_parser = subparsers.add_parser("kill")
-    kill_parser.add_argument('peer', type=int, help='Which peer should die')
+    kill_parser.add_argument('peer', type=str, help='Which peer should die')
     kill_parser.set_defaults(func=kill)
     
     kill_parser = subparsers.add_parser("launch")

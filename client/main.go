@@ -28,8 +28,8 @@ func (r *ReplicaServers) sendExecCommand(req *pb.PaxosCommand) (*pb.Result, erro
 			log.Printf("Sending command to %v, %v", p, c)
 			res, err := c.ExecuteCommand(context.Background(), req)
 			for {
+				time.Sleep(10 * time.Millisecond)
 				if err != nil {
-					log.Printf("%v exec error %v", p, err)
 					res, err = c.ExecuteCommand(context.Background(), req)
 				} else if res.GetRedirect() != nil {
 					log.Fatalf("Should never receive Redirect")
@@ -41,7 +41,7 @@ func (r *ReplicaServers) sendExecCommand(req *pb.PaxosCommand) (*pb.Result, erro
 			}
 		}(peer, client)
 	}
-	var ret *pb.Result = <-C
+	ret := <-C
 	return ret, nil
 }
 
