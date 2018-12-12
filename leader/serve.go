@@ -67,8 +67,10 @@ func (l *Leader) sendAcceptorsPhaseOneA(id string, acceptorClients map[string]pb
 			_, err := c.PhaseOneA(context.Background(), &pb.PhaseOneArg{
 				LeaderId:  id,
 				BallotNum: &b})
-			if err != nil {
-				log.Printf("Error during PhaseOneA RPC call to %v", p)
+			for err != nil {
+				_, err = c.PhaseOneA(context.Background(), &pb.PhaseOneArg{
+					LeaderId:  id,
+					BallotNum: &b})
 			}
 		}(c, p)
 	}
@@ -81,8 +83,10 @@ func (l *Leader) sendAcceptorsPhaseTwoA(id string, acceptorClients map[string]pb
 			_, err := c.PhaseTwoA(context.Background(), &pb.PhaseTwoArg{
 				LeaderId: id,
 				Pv:       &pv})
-			if err != nil {
-				log.Printf("Error during PhaseTwoA RPC call to %v", p)
+			for err != nil {
+				_, err = c.PhaseTwoA(context.Background(), &pb.PhaseTwoArg{
+					LeaderId: id,
+					Pv:       &pv})
 			}
 		}(c, p)
 	}
@@ -91,10 +95,10 @@ func (l *Leader) sendAcceptorsPhaseTwoA(id string, acceptorClients map[string]pb
 func (l *Leader) sendReplicasDecision(id string, replicaClients map[string]pb.ReplicaServiceClient, prop pb.Proposal) {
 	for p, c := range replicaClients {
 		go func(c pb.ReplicaServiceClient, p string) {
-			log.Printf("Send PhaseTwoA RPC to %v", p)
+			log.Printf("Send Decision RPC to %v", p)
 			_, err := c.Decision(context.Background(), &prop)
-			if err != nil {
-				log.Printf("Error during ReplicaDecision RPC call to %v", p)
+			for err != nil {
+				_, err = c.Decision(context.Background(), &prop)
 			}
 		}(c, p)
 	}
@@ -103,10 +107,6 @@ func (l *Leader) sendReplicasDecision(id string, replicaClients map[string]pb.Re
 func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string, port int) {
 	leader := NewLeader(id)
 	go RunLeaderServiceServer(leader, port)
-
-	log.Printf("Sleep for two second so that all node is up")
-	time.Sleep(4 * time.Second)
-	log.Printf("Sleep Done")
 
 	replicaClients := make(map[string]pb.ReplicaServiceClient)
 	for _, peer := range *replicas {
@@ -138,11 +138,22 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 	// serve loop
 	// Spawn scout
 	leader.scoutArg = leader.ballotNum
+	for k := range acceptorClients {
+		scoutWaitFor[k] = true
+	}
 	leader.sendAcceptorsPhaseOneA(id, acceptorClients, *leader.ballotNum)
+	log.Printf("Serve loop start")
 	for {
+		log.Printf("Waiting")
 		select {
 		case prop := <-leader.proposeChan:
 			log.Printf("Processing  Propose Message: %v", prop)
+			for _, v := range leader.proposals {
+				if v.SlotIdx == prop.SlotIdx {
+					log.Printf("Ignore proposal with same slotNum")
+					break
+				}
+			}
 			leader.AddProposal(prop)
 			if leader.active {
 				//Spawn Commander
@@ -150,6 +161,9 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 					BallotIdx: leader.ballotNum,
 					SlotIdx:   prop.SlotIdx,
 					Command:   prop.Command}}
+				for k := range acceptorClients {
+					commanderWaitFor[k] = true
+				}
 				leader.sendAcceptorsPhaseTwoA(id, acceptorClients, *leader.commanderArg[0])
 			}
 		case arg := <-leader.adoptedChan:
@@ -160,6 +174,10 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 			for _, v := range arg.pvals {
 				leader.commanderArg = append(leader.commanderArg, v)
 			}
+			for k := range acceptorClients {
+				commanderWaitFor[k] = true
+			}
+			log.Printf("Leader Activated")
 			leader.active = true
 		case preempted := <-leader.preemptedChan:
 			log.Printf("Processing Preempted Message %v", preempted)
@@ -170,6 +188,9 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 					LeaderId: leader.ballotNum.LeaderId}
 				// Spawn scout
 				leader.scoutArg = leader.ballotNum
+				for k := range acceptorClients {
+					scoutWaitFor[k] = true
+				}
 				leader.sendAcceptorsPhaseOneA(id, acceptorClients, *leader.ballotNum)
 			}
 		case pOne := <-leader.phaseOneChan:
@@ -180,17 +201,23 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 					for _, v := range pOne.Accepted {
 						scoutPvalue = append(scoutPvalue, v)
 					}
+					log.Printf("Before deletion %v %v", scoutWaitFor, len(scoutWaitFor))
 					delete(scoutWaitFor, pOne.AcceptorId)
+					log.Printf("After deletion %v %v", scoutWaitFor, len(scoutWaitFor))
 					if len(scoutWaitFor) < acceptors.Num()/2 {
 						leader.adoptedChan <- AdoptedInputType{
 							ballotNum: scoutBallotNum,
 							pvals:     scoutPvalue}
+						log.Printf("Adopt the ballotNum %v", leader.adoptedChan)
+
 						leader.scoutArg = nil
 					}
 				} else {
 					leader.preemptedChan <- pOne.BallotNum
 					leader.scoutArg = nil
 				}
+			} else {
+				log.Printf("Scout is not active")
 			}
 		case pTwo := <-leader.phaseTwoChan:
 			log.Printf("Processing PhaseTwoB")
@@ -204,6 +231,9 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 							Command: leader.commanderArg[0].Command})
 						if len(leader.commanderArg) != 1 {
 							leader.commanderArg = leader.commanderArg[1:]
+							for k := range acceptorClients {
+								commanderWaitFor[k] = true
+							}
 							leader.sendAcceptorsPhaseTwoA(id, acceptorClients, *leader.commanderArg[0])
 						} else {
 							leader.commanderArg = nil
@@ -214,6 +244,9 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 					leader.preemptedChan <- pTwo.BallotNum
 					if len(leader.commanderArg) != 1 {
 						leader.commanderArg = leader.commanderArg[1:]
+						for k := range acceptorClients {
+							commanderWaitFor[k] = true
+						}
 						leader.sendAcceptorsPhaseTwoA(id, acceptorClients, *leader.commanderArg[0])
 					} else {
 						leader.commanderArg = nil
@@ -222,4 +255,5 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, id string,
 			}
 		}
 	}
+	log.Printf("Should not get to here")
 }

@@ -30,6 +30,16 @@ func TestCheckProposals(t *testing.T) {
 
 }
 
+func TestNum(t *testing.T) {
+	ap := arrayPeers{"h1", "h2", "333"}
+	if ap.Num() != 3 {
+		t.Errorf("Length should be 3")
+	}
+	if ap.Num()/2 != 1 {
+		t.Errorf("Length should be 1")
+	}
+}
+
 func TestPmax(t *testing.T) {
 	arg := make([]*pb.Pvalue, 0, 0)
 	for i := 0; i < 5; i++ {

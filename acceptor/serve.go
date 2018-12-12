@@ -63,10 +63,6 @@ func BallotNumLessThan(bn *pb.BallotNum, other *pb.BallotNum) bool {
 func serve(acceptor *Acceptor, r *rand.Rand, leaders *arrayPeers, id string, port int) {
 	go RunAcceptorServiceServer(acceptor, port)
 
-	log.Printf("Sleep for two second so that all node is up")
-	time.Sleep(2 * time.Second)
-	log.Printf("Sleep Done")
-
 	leaderClients := make(map[string]pb.LeaderServiceClient)
 	for _, peer := range *leaders {
 		client, err := connectToLeader(peer)
@@ -79,6 +75,7 @@ func serve(acceptor *Acceptor, r *rand.Rand, leaders *arrayPeers, id string, por
 	}
 
 	// serve loop
+	log.Printf("Serve loop starting")
 	for {
 		select {
 		case pOne := <-acceptor.phaseOneChan:
@@ -98,7 +95,10 @@ func serve(acceptor *Acceptor, r *rand.Rand, leaders *arrayPeers, id string, por
 				go func(c pb.LeaderServiceClient, p string) {
 					log.Printf("Send PhaseOneB RPC to %v", p)
 					log.Printf("with arg: %v", arg)
-					c.PhaseOneB(context.Background(), arg)
+					_, err := c.PhaseOneB(context.Background(), arg)
+					for err != nil {
+						_, err = c.PhaseOneB(context.Background(), arg)
+					}
 				}(leaderClients[pOne.LeaderId], pOne.LeaderId)
 
 			}
@@ -118,7 +118,10 @@ func serve(acceptor *Acceptor, r *rand.Rand, leaders *arrayPeers, id string, por
 				go func(c pb.LeaderServiceClient, p string) {
 					log.Printf("Send PhaseTwoB RPC to %v", p)
 					log.Printf("with arg: %v", arg)
-					c.PhaseTwoB(context.Background(), arg)
+					_, err := c.PhaseTwoB(context.Background(), arg)
+					for err != nil {
+						_, err = c.PhaseTwoB(context.Background(), arg)
+					}
 				}(leaderClients[pTwo.LeaderId], pTwo.LeaderId)
 			}
 		}

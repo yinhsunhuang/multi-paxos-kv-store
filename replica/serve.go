@@ -87,9 +87,6 @@ func getStringRepresent(cmd *pb.PaxosCommand) string {
 
 func serve(s *KVStore, replica *Replica, r *rand.Rand, peers *arrayPeers, id string, port int) {
 	go RunReplicaServiceServer(replica, port)
-	log.Printf("Sleep for two second so that all node is up")
-	time.Sleep(2 * time.Second)
-	log.Printf("Sleep Done")
 
 	leaders := make(map[string]pb.LeaderServiceClient)
 	for _, peer := range *peers {
@@ -127,7 +124,7 @@ func serve(s *KVStore, replica *Replica, r *rand.Rand, peers *arrayPeers, id str
 			}
 			respChan, ok := responseMap[getStringRepresent(decision.decision.Command)]
 			if !ok {
-				log.Fatalf("No such response channel")
+				log.Printf("No such response channel")
 			}
 			perform(replica, s, decision.decision.Command, leaders, respChan)
 		case <-replica.quitChan:

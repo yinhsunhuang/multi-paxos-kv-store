@@ -36,7 +36,9 @@ func NewLeader(id string) *Leader {
 		proposeChan:  make(chan *pb.Proposal),
 		active:       false,
 		proposals:    make([]*pb.Proposal, 0, 5),
-		adoptedChan:  make(chan AdoptedInputType),
+		adoptedChan:  make(chan AdoptedInputType, 1),
+		phaseOneChan: make(chan *pb.PhaseOneBArg),
+		phaseTwoChan: make(chan *pb.PhaseTwoBArg),
 		scoutArg:     nil,
 		commanderArg: nil}
 	return &ret
@@ -111,10 +113,13 @@ func (l *Leader) Propose(ctx context.Context, in *pb.Proposal) (*pb.Empty, error
 
 func (l *Leader) PhaseOneB(ctx context.Context, in *pb.PhaseOneBArg) (*pb.Empty, error) {
 	log.Printf("Receive phaseOneB RPC call")
+	l.phaseOneChan <- in
+	log.Printf("Pushed to phaseOneChan")
 	return &pb.Empty{}, nil
 }
 
 func (l *Leader) PhaseTwoB(ctx context.Context, in *pb.PhaseTwoBArg) (*pb.Empty, error) {
 	log.Printf("Receive phaseTwoB RPC call")
+	l.phaseTwoChan <- in
 	return &pb.Empty{}, nil
 }
