@@ -15,3 +15,7 @@ func (a *arrayPeers) Set(v string) error {
 	*a = append(*a, v)
 	return nil
 }
+
+func (a *arrayPeers) Num() int {
+	return len(*a)
+}

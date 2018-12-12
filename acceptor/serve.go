@@ -63,6 +63,10 @@ func BallotNumLessThan(bn *pb.BallotNum, other *pb.BallotNum) bool {
 func serve(acceptor *Acceptor, r *rand.Rand, leaders *arrayPeers, id string, port int) {
 	go RunAcceptorServiceServer(acceptor, port)
 
+	log.Printf("Sleep for two second so that all node is up")
+	time.Sleep(2 * time.Second)
+	log.Printf("Sleep Done")
+
 	leaderClients := make(map[string]pb.LeaderServiceClient)
 	for _, peer := range *leaders {
 		client, err := connectToLeader(peer)
@@ -89,13 +93,14 @@ func serve(acceptor *Acceptor, r *rand.Rand, leaders *arrayPeers, id string, por
 				AcceptorId: id,
 				BallotNum:  acceptor.ballotNum,
 				Accepted:   acceptor.accepted}
-			for p, c := range leaderClients {
-				// Send in parallel so we don't wait for each client.
+			// Send in parallel so we don't wait for each client.
+			if _, ok := leaderClients[pOne.LeaderId]; ok {
 				go func(c pb.LeaderServiceClient, p string) {
 					log.Printf("Send PhaseOneB RPC to %v", p)
 					log.Printf("with arg: %v", arg)
 					c.PhaseOneB(context.Background(), arg)
-				}(c, p)
+				}(leaderClients[pOne.LeaderId], pOne.LeaderId)
+
 			}
 		case pTwo := <-acceptor.phaseTwoChan:
 			log.Printf("Processing Phase Two A Msg %v", pTwo)
@@ -108,13 +113,13 @@ func serve(acceptor *Acceptor, r *rand.Rand, leaders *arrayPeers, id string, por
 			arg := &pb.PhaseTwoBArg{
 				AcceptorId: id,
 				BallotNum:  acceptor.ballotNum}
-			for p, c := range leaderClients {
+			if _, ok := leaderClients[pTwo.LeaderId]; ok {
 				// Send in parallel so we don't wait for each client.
 				go func(c pb.LeaderServiceClient, p string) {
 					log.Printf("Send PhaseTwoB RPC to %v", p)
 					log.Printf("with arg: %v", arg)
 					c.PhaseTwoB(context.Background(), arg)
-				}(c, p)
+				}(leaderClients[pTwo.LeaderId], pTwo.LeaderId)
 			}
 		}
 	}
