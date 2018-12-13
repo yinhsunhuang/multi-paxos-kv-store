@@ -43,7 +43,7 @@ func NewLeader(id string) *Leader {
 		pingChan:      make(chan PingInputType),
 		proposals:     make([]*pb.Proposal, 0, 5),
 		adoptedChan:   make(chan AdoptedInputType, 1),
-		preemptedChan: make(chan *pb.BallotNum, 1),
+		preemptedChan: make(chan *pb.BallotNum, 10),
 		phaseOneChan:  make(chan *pb.PhaseOneBArg),
 		phaseTwoChan:  make(chan *pb.PhaseTwoBArg),
 		scoutArg:      nil,

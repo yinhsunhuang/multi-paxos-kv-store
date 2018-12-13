@@ -119,15 +119,13 @@ func (l *Leader) sendReplicasDecision(id string, replicaClients map[string]pb.Re
 	}
 }
 
-func randomDuration(r *rand.Rand) time.Duration {
+func randomDuration(r *rand.Rand, DurationMax int, DurationMin int) time.Duration {
 	// Constant
-	const DurationMax = 4000
-	const DurationMin = 1000
 	return time.Duration(r.Intn(DurationMax-DurationMin)+DurationMin) * time.Millisecond
 }
 
 // Restart the supplied timer using a random timeout based on function above
-func restartTimer(timer *time.Timer, r *rand.Rand) {
+func restartTimer(timer *time.Timer, r *rand.Rand, DurationMax int, DurationMin int) {
 	log.Printf("Restart Timer")
 	stopped := timer.Stop()
 	// If stopped is false that means someone stopped before us, which could be due to the timer going off before this,
@@ -138,7 +136,7 @@ func restartTimer(timer *time.Timer, r *rand.Rand) {
 			<-timer.C
 		}
 	}
-	timer.Reset(randomDuration(r))
+	timer.Reset(randomDuration(r, DurationMax, DurationMin))
 }
 
 func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, leaders *arrayPeers, id string, port int) {
@@ -183,9 +181,9 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, leaders *a
 	scoutWaitFor := make(map[string]bool)
 
 	commanderWaitFor := make(map[string]bool)
-	timer := time.NewTimer(randomDuration(r))
+	timer := time.NewTimer(randomDuration(r, 4000, 1000))
 
-	scoutTimer := time.NewTimer(randomDuration(r))
+	scoutTimer := time.NewTimer(randomDuration(r, 7000, 5000))
 
 	foundLeaderChan := make(chan bool)
 
@@ -218,12 +216,12 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, leaders *a
 					}(c, p)
 				}
 			}
-			restartTimer(timer, r)
+			restartTimer(timer, r, 4000, 1000)
 		case <-foundLeaderChan:
 			log.Printf("Ping found active leader, resetting timer")
-			restartTimer(scoutTimer, r)
+			restartTimer(scoutTimer, r, 7000, 5000)
 		case <-scoutTimer.C:
-			log.Printf("Timeout not finding active Leader")
+			log.Printf("Scout Timeout")
 			if !leader.active {
 				if leader.scoutArg == nil {
 					log.Printf("Starting Scout thread")
@@ -234,6 +232,7 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, leaders *a
 					leader.sendAcceptorsPhaseOneA(id, acceptorClients, *leader.ballotNum)
 				}
 			}
+			restartTimer(scoutTimer, r, 7000, 5000)
 		case q := <-leader.pingChan:
 			log.Printf("Pong")
 			q.response <- leader.active

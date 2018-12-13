@@ -1,35 +1,36 @@
 # Multi-Creed Paxos Key Store
 This project implements a Key-Store replicated state machine upon multi-creed paxos.
 
-# Messages
+## Compile and Run
+```shell
+protoc -I pb pb/kv.proto --go_out=plugins=grpc:pb
+./create-docker-image.sh
+```
 
-## Kv Store, a.k.a. Command 
-Defined in ```pb/kv.proto```. These are the command that a client can
-issue to replicas.
+## Boot the pods
+```shell
+./launch-tool/launch.py boot 2 1 3
+```
+for booting 2 replicas, 1 leader and 3 acceptors
 
-## Replica
-### Sending
-* &lt;**propose**, s, c\&gt;
-* &lt;**response**, cid, result&gt;
-### Receiving
-* &lt;**request**, c&gt;
-* &lt;**decision**, s, c&gt;
+## Run client
+use
+```shell
+kubectl get svc
+```
+to see the port of rep0, rep1, ...
 
-## Acceptor
-### Sending
-* &lt;**p1a**, l, b&gt;
-* &lt;**p2a**, l, &lt;b,s,c&gt;&gt;
-### Receiving
-* &lt;**p2b**, self(), *ballot_num*, *accepted*&gt;
-* &lt;**p2b**, self(), *ballot_num*&gt;
+run
+```shell
+go run ./client/ [ip]:port1, [ip]:port2
+```
+where [ip] is the result of 
+```shell
+minikube ip
+```
 
-
-
-# Data Structure
-
-# Notes
-To be consistent with lab2, each client request is treated as a unique one
-
-# Program Logic
-## Replica
-Index response by Key as ClientId + CommandId
+## Kill one pod
+```shell
+./launch-tool/launch.py kill acc0
+```
+to kill acc0 pod
