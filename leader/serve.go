@@ -126,6 +126,21 @@ func randomDuration(r *rand.Rand) time.Duration {
 	return time.Duration(r.Intn(DurationMax-DurationMin)+DurationMin) * time.Millisecond
 }
 
+// Restart the supplied timer using a random timeout based on function above
+func restartTimer(timer *time.Timer, r *rand.Rand) {
+	log.Printf("Restart Timer")
+	stopped := timer.Stop()
+	// If stopped is false that means someone stopped before us, which could be due to the timer going off before this,
+	// in which case we just drain notifications.
+	if !stopped {
+		// Loop for any queued notifications
+		for len(timer.C) > 0 {
+			<-timer.C
+		}
+	}
+	timer.Reset(randomDuration(r))
+}
+
 func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, leaders *arrayPeers, id string, port int) {
 	leader := NewLeader(id)
 	go RunLeaderServiceServer(leader, port)
@@ -170,6 +185,10 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, leaders *a
 	commanderWaitFor := make(map[string]bool)
 	timer := time.NewTimer(randomDuration(r))
 
+	scoutTimer := time.NewTimer(randomDuration(r))
+
+	foundLeaderChan := make(chan bool)
+
 	// serve loop
 	// Spawn scout
 	leader.scoutArg = leader.ballotNum
@@ -183,7 +202,38 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, leaders *a
 		select {
 		case <-timer.C:
 			log.Printf("Timeout")
-			log.Printf("Pinging")
+			if !leader.active {
+				log.Printf("Pinging")
+				for p, c := range leaderClients {
+					go func(c pb.LeaderServiceClient, p string) {
+						log.Printf("Send Ping RPC to %v", p)
+						ret, err := c.Ping(context.Background(), &pb.Empty{})
+						for err != nil {
+							time.Sleep(10 * time.Millisecond)
+							ret, err = c.Ping(context.Background(), &pb.Empty{})
+						}
+						if ret.IsLeader {
+							foundLeaderChan <- true
+						}
+					}(c, p)
+				}
+			}
+			restartTimer(timer, r)
+		case <-foundLeaderChan:
+			log.Printf("Ping found active leader, resetting timer")
+			restartTimer(scoutTimer, r)
+		case <-scoutTimer.C:
+			log.Printf("Timeout not finding active Leader")
+			if !leader.active {
+				if leader.scoutArg == nil {
+					log.Printf("Starting Scout thread")
+					leader.scoutArg = leader.ballotNum
+					for k := range acceptorClients {
+						scoutWaitFor[k] = true
+					}
+					leader.sendAcceptorsPhaseOneA(id, acceptorClients, *leader.ballotNum)
+				}
+			}
 		case q := <-leader.pingChan:
 			log.Printf("Pong")
 			q.response <- leader.active
@@ -300,6 +350,8 @@ func serve(r *rand.Rand, replicas *arrayPeers, acceptors *arrayPeers, leaders *a
 						leader.commanderArg = nil
 					}
 				}
+			} else {
+				log.Printf("No commander is active")
 			}
 		}
 	}
